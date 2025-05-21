@@ -12,12 +12,15 @@
 #define LED_AZUL 11  // 15° <= Inclinação <= 30°
 #define GRAVITY 9.81
 #define ACEL 3.6
+#define THRESHOLD 0.05 
 
 float velocidade = 0.0;
 absolute_time_t timer_back;
 float ax_g = 0;
 float ay_g = 0;
 float az_g = 0;
+float ax2ms = 0;
+int16_t ax, ay, az;
 
 void inicializar_mpu6050() {
     uint8_t reset[2] = {0x6B, 0x00}; // Endereço do registrador Power Management 1
@@ -57,6 +60,26 @@ void inicializar_leds() {
     gpio_put(LED_AZUL, 0);
 }
 
+float threshold_acelerometer(int samples){
+    float sum = 0;
+    float midrain;
+
+    for (int i = 0; i < samples; i++){
+        ler_acelerometro(&ax, &ay, &az);
+        calcular_inclinacao(ax, ay, az);  // Lê os valores do acelerômetro
+        ax_g = ax / 16384.0;  // Converte os valores para g
+        ay_g = ay / 16384.0;
+        az_g = az / 16384.0;
+        midrain = sqrt(ax_g*ax_g + ay_g*ay_g + az_g*az_g);
+        sum += midrain;
+        sleep_us(1000);
+    }
+    
+    float mean = sum / samples;
+
+    return mean;
+}
+
 void acionar_led(float inclinacao) {
     if (inclinacao > 30.0) {
         gpio_put(LED_VERMELHO, 1);  // Liga o LED vermelho
@@ -85,7 +108,11 @@ int main() {
     inicializar_mpu6050();
     inicializar_leds();
 
-    int16_t ax, ay, az;
+    float callibrateOFFset = threshold_acelerometer(100);
+
+    sleep_ms(5000);
+
+    printf("Linha de tolerância = %.2f\n", callibrateOFFset);
 
     while (true) {
         timer_back = get_absolute_time();
@@ -97,13 +124,16 @@ int main() {
         float delta = delta_us / 1e6;
         timer_back = actual_time;
 
-        float ax2ms = az_g * 9.81f;
+        if (callibrateOFFset > THRESHOLD){
 
-        if(fabs(ax2ms) < 0.1f) {
-            ax2ms = 0.0f;
-        }
-
-        velocidade += ax2ms * delta;
+            ax2ms = ax_g * 9.81f;
+            
+            if(fabs(ax2ms) < 0.1f) {
+                ax2ms = 0.0f;
+            }
+            
+            velocidade += ax2ms * delta;
+        } 
 
         float inclinacao = calcular_inclinacao(ax, ay, az);
 
