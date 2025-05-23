@@ -19,7 +19,7 @@ absolute_time_t timer_back;
 float ax_g = 0;
 float ay_g = 0;
 float az_g = 0;
-float ax2ms = 0;
+float ax2ms, ay2ms, az2ms;
 int16_t ax, ay, az;
 
 void inicializar_mpu6050() {
@@ -67,10 +67,10 @@ float threshold_acelerometer(int samples){
     for (int i = 0; i < samples; i++){
         ler_acelerometro(&ax, &ay, &az);
         calcular_inclinacao(ax, ay, az);  // Lê os valores do acelerômetro
-        ax_g = ax / 16384.0;  // Converte os valores para g
-        ay_g = ay / 16384.0;
-        az_g = az / 16384.0;
-        midrain = sqrt(ax_g*ax_g + ay_g*ay_g + az_g*az_g);
+        ax_g = ax_g *9.81f;  // Converte os valores para g e para m/s²
+        ay_g = ay_g *9.81f;
+        az_g = az_g *9.81f;
+        midrain = sqrt(ax_g*ax_g + az_g*az_g);
         sum += midrain;
         sleep_us(1000);
     }
@@ -99,6 +99,15 @@ void acionar_led(float inclinacao) {
     }
 }
 
+float acel_linear(){
+    ax_g = (ax / 16384.0)*9.81f;  // Converte os valores para g e para m/s²
+    az_g = (az / 16384.0)*9.81f;
+
+    float result = sqrt(ax_g * ax_g + ay_g * ay_g);
+    printf("%.2f\n", result);
+    return result;
+}
+
 int main() {
     stdio_init_all();
     i2c_init(i2c1, 400*1000); // Inicializa I2C
@@ -124,22 +133,17 @@ int main() {
         float delta = delta_us / 1e6;
         timer_back = actual_time;
 
-        if (callibrateOFFset > THRESHOLD){
+        float acel_vetor = acel_linear();
 
-            ax2ms = ax_g * 9.81f;
-            
-            if(fabs(ax2ms) < 0.1f) {
-                ax2ms = 0.0f;
-            }
-            
-            velocidade += ax2ms * delta;
+        if (acel_vetor > callibrateOFFset){
+            printf("Lançamento rapido\n");
         } 
 
         float inclinacao = calcular_inclinacao(ax, ay, az);
 
         printf("Acelerômetro: X=%d, Y=%d, Z=%d\n", ax, ay, az);
         printf("Inclinação no eixo X: %.2f graus\n", inclinacao);
-        printf("Aceleração em X: %.2f m/s² | Velocidade estimada: %.2f m/s\n", ax2ms, velocidade);
+        printf("Aceleração em X: %.2f m/s², Y: %.2f m/s², Z: %.2f m/s²", ax_g, ay_g, az_g);
 
         acionar_led(inclinacao);
 
